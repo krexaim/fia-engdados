@@ -1,16 +1,8 @@
-from fastapi import FastAPI,HTTPException, status, APIRouter
-from typing import Annotated, Any, List, Optional
-from pathlib import Path
-from app.models.aluno import AlunoResponse, AlunoRequest
-
-
-
-ALUNOS = [
-    {"id": 1, "nome": "Pedro", "idade": 10, "email": "pedro@gmail.com", "senha": "1234"},
-    {"id": 2, "nome": "Paulo", "idade": 20, "email": "paulo@gmail.com", "senha": "1234"},
-    {"id": 3, "nome": "Gabriel", "idade": 35, "email": "gabriel@gmail.com", "senha": "1234"},
-    {"id": 4, "nome": "Maria", "idade": 18, "email":"maria@gmail.com", "senha": "1234"}
-]
+from fastapi import HTTPException, status, APIRouter
+from typing import Any, List
+from app.models.aluno import Aluno, AlunoResponse, AlunoRequest
+from sqlmodel import select, Session
+from app.db import ActiveSession
 
 router = APIRouter()
 
@@ -20,47 +12,56 @@ async def home():
     return "Olá alunos"
 
 
-@router.get("/alunos/", response_model=List[AlunoResponse], status_code=status.HTTP_200_OK)
-async def Alunos()-> Any:
-    return ALUNOS
+@router.get("/alunos/", response_model=List[Aluno], status_code=status.HTTP_200_OK)
+async def Consultar_Alunos_ID(session: Session = ActiveSession)-> Any:
+    result = await session.execute(select(Aluno))
+    _alunos = result.scalars().all()
+    return _alunos
 
 
 @router.get("/alunos/{idAluno}", response_model=AlunoResponse, status_code=status.HTTP_200_OK)
-async def Consultar_Aluno(idAluno: Annotated[int, Path(title="O ID do aluno para a consulta", ge=1)]) -> Any:
-      for item in ALUNOS:
-        if item["id"] == idAluno:
-            return item
-      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
-      
+async def Consultar_Aluno(idAluno:int,  session: Session = ActiveSession) -> Any:
+     result = await session.execute(select(Aluno).where(Aluno.id == idAluno))
+     _aluno = result.scalar_one_or_none()
+     if _aluno is None:
+         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+     return _aluno
+     
+       
 
 @router.post("/alunos", response_model=AlunoResponse, status_code=status.HTTP_201_CREATED)
 # async def Inserir_Aluno(aluno: str):
-async def Inserir_Aluno(aluno: AlunoRequest)-> Any:
-  for _aluno in ALUNOS:
-        if _aluno["id"] == aluno.id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Já existe um aluno com esse ID")
-        
-  ALUNOS.append(aluno.dict())
- 
-  return aluno
-  
+async def Inserir_Aluno(aluno: AlunoRequest, session: Session = ActiveSession)-> Any:
+  db_aluno = Aluno.from_orm(aluno)
+  session.add(db_aluno)
+  await session.commit()
+  await session.refresh(db_aluno)
+  return db_aluno
 
 @router.put("/alunos/{idAluno}", response_model=AlunoResponse,  status_code=status.HTTP_200_OK)
-async def Atualizar_Aluno(idAluno:int, aluno: AlunoRequest) -> Any:
- for _aluno in ALUNOS:
-        if _aluno["id"] == aluno.id:
-            _aluno["nome"] = aluno.nome
-            _aluno["idade"] = aluno.idade
-            _aluno["email"] = aluno.email
-            _aluno["senha"] = aluno.senha
-            
-            return _aluno
- raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+async def Atualizar_Aluno(idAluno:int, aluno: AlunoRequest, session: Session = ActiveSession) -> Any:
+    result = await session.execute(select(Aluno).where(Aluno.id == idAluno))
+    db_aluno = result.scalar_one_or_none()
+
+    if db_aluno is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+    
+    db_aluno.nome = aluno.nome
+    db_aluno.email = aluno.email
+    db_aluno.idade = aluno.idade
+    db_aluno.senha = aluno.senha
+
+    await session.commit()
+    await session.refresh(db_aluno)
+    return db_aluno
 
 
 @router.delete("/alunos/{idAluno}", response_model=AlunoResponse, status_code=status.HTTP_200_OK)
-async def Deletar_Aluno(idAluno: int) -> Any:
-    for index, alnno in enumerate(ALUNOS):
-        if alnno["id"] == idAluno:
-            return ALUNOS.pop(index)
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+async def Deletar_Aluno(idAluno: int, session: Session = ActiveSession) -> Any:   
+    result = await session.execute(select(Aluno).where(Aluno.id == idAluno))
+    db_aluno = result.scalar_one_or_none()
+    if db_aluno is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+    await session.delete(db_aluno)
+    await session.commit()
+    return db_aluno
