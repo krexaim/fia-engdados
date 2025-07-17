@@ -77,8 +77,8 @@ async def Atualizar_Aluno(idAluno:int, aluno: AlunoRequest) -> Any:
 
 @app.delete("/alunos/{idAluno}", response_model=AlunoResponse, status_code=status.HTTP_200_OK)
 async def Deletar_Aluno(idAluno: int) -> Any:
-    for index, alnno in enumerate(ALUNOS):
-        if alnno["id"] == idAluno:
+    for index, aluno in enumerate(ALUNOS):
+        if aluno["id"] == idAluno:
             return ALUNOS.pop(index)
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
 
